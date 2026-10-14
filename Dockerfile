@@ -12,6 +12,7 @@ RUN install-php-extensions gd exif bcmath intl zip
 USER www-data
 WORKDIR /var/www/html
 COPY --from=vendor --chown=www-data:www-data /app /var/www/html
+COPY --chmod=755 --chown=www-data:www-data docker/45-db-reset.sh /etc/entrypoint.d/45-db-reset.sh
 # runs `php artisan migrate --force` and `storage:link` on start, and caches config/routes
 ENV AUTORUN_ENABLED=true \
     AUTORUN_LARAVEL_MIGRATION_ISOLATION=false \
