@@ -16,6 +16,9 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
+    // where the website's Contact form messages are delivered
+    'contact_to' => env('CONTACT_TO_EMAIL', 'metalslug4213@gmail.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations
@@ -45,7 +48,8 @@ return [
             'port' => env('MAIL_PORT', 2525),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            // seconds to wait for the mail server; a blocked or wrong host then fails fast instead of hanging
+            'timeout' => (int) env('MAIL_TIMEOUT', 10),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 

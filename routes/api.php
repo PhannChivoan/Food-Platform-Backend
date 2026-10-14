@@ -30,6 +30,9 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
     Route::get('/partner/email-available', [\App\Http\Controllers\Api\V1\PartnerController::class, 'emailAvailable'])->middleware('throttle:30,1');
     Route::post('/partner/register', [\App\Http\Controllers\Api\V1\PartnerController::class, 'register']);
 
+    // Contact form: emails the site owner (limited to 5 messages a minute per visitor)
+    Route::post('/contact', [\App\Http\Controllers\Api\V1\ContactController::class, 'send'])->middleware('throttle:5,1');
+
     // ---------- RIDER PORTAL ----------
     Route::post('/rider/register', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'register']);
     Route::middleware(['auth:sanctum'])->prefix('rider')->group(function () {
