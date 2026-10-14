@@ -24,6 +24,14 @@ else
   art migrate --force || echo "WARNING: migrations failed, starting anyway"
 fi
 
+# run specific seeders once without a shell, e.g. RUN_SEEDERS=NavigationSeeder (idempotent ones only; remove after)
+if [ -n "$RUN_SEEDERS" ]; then
+  for s in $(echo "$RUN_SEEDERS" | tr ',' ' '); do
+    echo "seeding: $s"
+    art db:seed --class="$s" --force || echo "WARNING: $s failed"
+  done
+fi
+
 art optimize || true
 echo "starting nginx + php-fpm on :8080"
 exec /usr/bin/supervisord -c /etc/supervisor/app.conf
