@@ -61,7 +61,7 @@ class PublicRestaurantController extends Controller
             $rBranches = $branches->get($r->id, collect());
             $rItems = $items->get($r->id, collect());
             $top = $rItems->first();
-            $prep = $rItems->avg('prep_time_minutes') ?: 15;
+            $prep = $rItems->avg('prep_time_minutes') ?: \App\Services\PlatformSettings::int('prep_time_minutes', 15);
 
             return [
                 'id' => $r->id,

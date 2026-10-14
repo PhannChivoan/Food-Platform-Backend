@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 
 class PlatformSetting extends Model
 {
@@ -27,14 +26,32 @@ class PlatformSetting extends Model
             ->toArray();
     }
 
-    public static function setValues(array $data): void
+    /**
+ * Writes a batch of settings. Unknown keys are created instead of silently dropped,
+ * so a new option on the settings screen is never lost, and the stored type/group
+ * are kept in sync with what the caller sent.
+ */
+public static function setValues(array $data): void
     {
+        $existing = static::whereIn('key', array_keys($data))->get()->keyBy('key');
+
         foreach ($data as $key => $value) {
             $raw = is_array($value) ? json_encode($value) : (string) $value;
-            DB::table('platform_settings')->where('key', $key)->update([
+            $current = $existing->get($key);
+
+            if ($current) {
+                $current->update(['value' => $raw]);
+                continue;
+            }
+
+            static::create([
+                'key' => $key,
                 'value' => $raw,
-                'updated_at' => now(),
+                'type' => is_numeric($raw) ? 'integer' : 'string',
+                'group' => 'general',
             ]);
         }
+
+        \App\Services\PlatformSettings::forget();
     }
 }

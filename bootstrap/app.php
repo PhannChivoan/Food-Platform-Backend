@@ -15,12 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // behind Northflank's load balancer: trust X-Forwarded-* so URLs are https
         $middleware->trustProxies(at: '*');
+        $middleware->append(\App\Http\Middleware\ApplyPlatformTimezone::class);
         $middleware->alias([
             'auth' => \App\Http\Middleware\Authenticate::class,
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'conditional.get' => \App\Http\Middleware\ConditionalGet::class,
+            'access.window' => \App\Http\Middleware\EnforceAccessWindow::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

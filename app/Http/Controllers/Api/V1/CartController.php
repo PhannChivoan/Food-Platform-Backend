@@ -269,6 +269,21 @@ class CartController extends Controller
         ]);
 
         $user = $request->user();
+
+        // ── platform settings that actually gate a new order ──
+        abort_if(
+            \App\Services\PlatformSettings::bool('maintenance_mode'),
+            503,
+            'Ordering is paused for maintenance. Please try again shortly.'
+        );
+
+        $allowedMethods = \App\Services\PlatformSettings::paymentMethods();
+        abort_if(
+            !in_array($v['payment_method'], $allowedMethods, true),
+            422,
+            'This payment method is not available right now.'
+        );
+
         if (!empty($v['address_id'])) {
             abort_unless(
                 DB::table('customer_addresses')->where('id', $v['address_id'])->where('user_id', $user->id)->where('is_hidden', false)->exists(),
@@ -329,13 +344,17 @@ class CartController extends Controller
                 $split['restaurant_payout'] = round($split['restaurant_payout'] - $discount, 2);
             }
 
+            // auto-accept (ordering.auto_accept_orders) skips the pending queue
+            $autoAccept = \App\Services\PlatformSettings::bool('auto_accept_orders', true);
+
             $order = Order::create([
                 'order_number' => 'ORD-' . now()->format('Ymd') . '-' . Str::random(6),
                 'customer_id' => $user->id,
                 'restaurant_id' => $restaurantId,
                 'branch_id' => $branch->id,
                 'delivery_address_id' => $addressId,
-                'status' => 'pending',
+                'status' => $autoAccept ? 'accepted' : 'pending',
+                'accepted_at' => $autoAccept ? now() : null,
                 'subtotal' => $subtotal,
                 'delivery_fee' => 0,
                 'surge_fee' => 0,

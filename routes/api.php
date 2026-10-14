@@ -27,6 +27,8 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
 
     // ---------- BUSINESS ONBOARDING ----------
     Route::get('/public/platform', [\App\Http\Controllers\Api\V1\PartnerController::class, 'platform']);
+    // live platform settings (name, branding, currency, maintenance flag, payment methods)
+    Route::get('/public/config', [\App\Http\Controllers\Api\V1\SettingsController::class, 'publicConfig']);
     Route::get('/partner/email-available', [\App\Http\Controllers\Api\V1\PartnerController::class, 'emailAvailable'])->middleware('throttle:30,1');
     Route::post('/partner/register', [\App\Http\Controllers\Api\V1\PartnerController::class, 'register']);
 
@@ -62,7 +64,7 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
     Route::get('/public/items/{id}', [\App\Http\Controllers\Api\V1\PublicRestaurantController::class, 'item'])->whereNumber('id');
 
     // ---------- PROTECTED ROUTES (Requires Valid Token) ----------
-    Route::middleware(['auth:sanctum'])->group(function () {
+    Route::middleware(['auth:sanctum', 'access.window'])->group(function () {
 
         // â”€â”€â”€ AUTH (Profile, Logout, Refresh) â”€â”€â”€
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -243,6 +245,8 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::delete('/shift-schedules/{id}', [ShiftScheduleController::class, 'destroy']);
 
         // ---------- MODULE 12: ACCESS WINDOWS ----------
+        // what the signed-in role is allowed to do right now (drives the lockout screen)
+        Route::get('/access-windows/status', [AccessWindowController::class, 'status']);
         Route::apiResource('/access-windows', AccessWindowController::class);
         Route::patch('/access-windows/{accessWindow}/toggle', [AccessWindowController::class, 'toggle']);
         Route::apiResource('/promotions', PromotionController::class);

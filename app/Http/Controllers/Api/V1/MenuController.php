@@ -47,6 +47,7 @@ class MenuController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         $query = MenuCategory::with('restaurant:id,name')
+            ->with('branch:id,name')
             ->withCount('menuItems');
 
         if ($search !== '') {
@@ -89,6 +90,9 @@ class MenuController extends Controller
                 'key' => "category-{$cat->id}",
                 'id' => $cat->id,
                 'restaurant_id' => $cat->restaurant_id,
+                'branch_id' => $cat->branch_id,
+                'branch_name' => $cat->branch?->name,
+                'branch_is_main' => (bool) ($cat->branch?->is_main),
                 'name' => $cat->name,
                 'slug' => $cat->slug,
                 'description' => $cat->description,

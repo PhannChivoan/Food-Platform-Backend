@@ -53,16 +53,23 @@ class AdminNotificationController extends Controller
         } else {
             $isStaff = in_array($user->role, ['super_admin', 'admin'], true);
 
+            // which alert groups the platform settings let through
+            $orderAlerts = \App\Services\PlatformSettings::bool('order_alerts', true);
+            $riderAlerts = \App\Services\PlatformSettings::bool('rider_alerts', true);
+            $refundAlerts = \App\Services\PlatformSettings::bool('refund_alerts', true);
+
             // new orders and what happened to them (scoped to the restaurants this user may see)
             $orders = Order::with('restaurant:id,name')->where('created_at', '>=', now()->subDay())->latest()->limit(60)->get();
             $assigned = DB::table('delivery_assignments')->whereIn('order_id', $orders->pluck('id'))->pluck('order_id')->flip();
             foreach ($orders as $o) {
                 $rn = $o->restaurant?->name ?? 'a restaurant';
-                $add("o{$o->id}", 'order', 'New order ' . $o->order_number, "{$rn} · " . $money($o->total), $o->created_at, '/orders');
-                if ($o->status === 'ready' && !$assigned->has($o->id)) {
+                if ($orderAlerts) {
+                    $add("o{$o->id}", 'order', 'New order ' . $o->order_number, "{$rn} · " . $money($o->total), $o->created_at, '/orders');
+                }
+                if ($riderAlerts && $o->status === 'ready' && !$assigned->has($o->id)) {
                     $add("r{$o->id}", 'warning', 'Order ready — needs a rider', "{$o->order_number} from {$rn} is waiting for dispatch.", $o->ready_at ?? $o->updated_at, '/dispatch');
                 }
-                if (in_array($o->status, ['cancelled', 'rejected'], true)) {
+                if ($refundAlerts && in_array($o->status, ['cancelled', 'rejected'], true)) {
                     $add("x{$o->id}", 'error', 'Order ' . $o->status, "{$o->order_number} from {$rn} was {$o->status}.", $o->cancelled_at ?? $o->updated_at, '/orders');
                 }
             }
@@ -88,6 +95,9 @@ class AdminNotificationController extends Controller
             'user' => app(AuthController::class)->me($request)->getData(true),
             'navigation' => app(NavigationItemsController::class)->index($request)->getData(true)['data'] ?? [],
             'notifications' => $this->index($request)->getData(true),
+            // so the shell can lock the screen and explain the access window
+            'access_window' => \App\Services\AccessWindowService::statusForUser($request->user()),
+            'platform' => \App\Services\PlatformSettings::publicConfig(),
         ]);
     }
 

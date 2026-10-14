@@ -19,6 +19,12 @@ class MenuCategory extends Model
         return $this->belongsTo(Restaurant::class);
     }
 
+    // categories are branch-scoped, so the same name can exist once per branch
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
     public function menuItems()
     {
         return $this->hasMany(MenuItem::class, 'category_id');

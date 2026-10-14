@@ -43,10 +43,20 @@ class DeliveryService
             DB::table('orders')->where('id', $a->order_id)->update([
                 'status' => 'delivered',
                 'delivered_at' => now(),
-                // cash orders are settled by the rider at the door
-                'is_paid' => DB::raw("CASE WHEN payment_method = 'cash' THEN 1 ELSE is_paid END"),
+                // cash orders are settled by the rider at the door; online payments are
+                // settled by the platform when payments.auto_settlement is on
+                'is_paid' => DB::raw(
+                    "CASE WHEN payment_method = 'cash' THEN 1"
+                    . (PlatformSettings::bool('auto_settlement', true) ? ' ELSE 1' : ' ELSE is_paid END')
+                ),
                 'updated_at' => now(),
             ]);
+
+            // record that the rider fee has been paid out
+            if (PlatformSettings::bool('auto_settlement', true)) {
+                DB::table('delivery_assignments')->where('id', $a->id)
+                    ->update(['settled_at' => now(), 'updated_at' => now()]);
+            }
 
             DB::table('rider_profiles')->where('id', $a->rider_profile_id)->update([
                 'total_trips' => DB::raw('total_trips + 1'),

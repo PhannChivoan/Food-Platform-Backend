@@ -59,7 +59,9 @@ class MyOrderController extends Controller
 
     private function eta(object $o, $items): array
     {
-        $prep = (int) (DB::table('menu_items')->whereIn('id', $items->pluck('menu_item_id'))->max('prep_time_minutes') ?: 15);
+        // dishes without their own prep time fall back to the platform default
+        $fallback = \App\Services\PlatformSettings::int('prep_time_minutes', 15);
+        $prep = (int) (DB::table('menu_items')->whereIn('id', $items->pluck('menu_item_id'))->max('prep_time_minutes') ?: $fallback);
         $start = $o->preparing_at ?? $o->accepted_at ?? $o->created_at;
         $elapsed = max(0, now()->diffInMinutes(\Carbon\Carbon::parse($start), true));
         $remaining = in_array($o->status, ['ready', 'dispatched', 'delivered'], true) ? 0 : max(2, $prep - (int) $elapsed);
