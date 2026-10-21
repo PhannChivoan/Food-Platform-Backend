@@ -11,7 +11,8 @@ class Order extends Model
         'delivery_address_id', 'status', 'subtotal', 'delivery_fee',
         'surge_fee', 'discount', 'tax', 'total', 'payment_method',
         'is_paid', 'customer_notes', 'accepted_at', 'preparing_at',
-        'ready_at', 'dispatched_at', 'delivered_at', 'cancelled_at', 'meta'
+        'ready_at', 'dispatched_at', 'delivered_at', 'cancelled_at', 'meta',
+        'refunded_at', 'refund_amount', 'refund_reason'
     ];
 
     protected $casts = [
@@ -29,6 +30,8 @@ class Order extends Model
         'dispatched_at' => 'datetime',
         'delivered_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'refunded_at' => 'datetime',
+        'refund_amount' => 'decimal:2',
     ];
 
     // Relationships
@@ -97,5 +100,7 @@ class Order extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new RestaurantScope());
+        static::addGlobalScope(new \App\Models\Scopes\PaidOrdersScope());
+        static::observe(\App\Observers\OrderObserver::class);
     }
 }

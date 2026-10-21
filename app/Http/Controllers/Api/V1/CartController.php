@@ -258,13 +258,14 @@ class CartController extends Controller
             'address_id' => 'nullable|integer',
             'address_details' => 'nullable|string|max:255', // floor / house number for this delivery
             'coupon_code' => 'nullable|string|max:50',
-            'address' => 'required_without:address_id|nullable|string|max:255',
+            // a pickup order has no delivery address
+            'address' => ($request->input('payment_method') === 'pickup' ? '' : 'required_without:address_id|') . 'nullable|string|max:255',
             'city' => 'nullable|string|max:100',
             'postal_code' => 'nullable|string|max:20',
             'address_label' => 'nullable|string|max:50',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
-            'payment_method' => 'required|in:cash,aba_khqr,card',
+            'payment_method' => 'required|in:cash,aba_khqr,card,pickup',
             'notes' => 'nullable|string|max:500',
         ]);
 
@@ -283,6 +284,11 @@ class CartController extends Controller
             422,
             'This payment method is not available right now.'
         );
+
+        $isPickup = $v['payment_method'] === 'pickup';
+        if ($isPickup) {
+            $v['address_id'] = null; // collected at the restaurant: no delivery address
+        }
 
         if (!empty($v['address_id'])) {
             abort_unless(
@@ -303,9 +309,21 @@ class CartController extends Controller
             : DB::table('branches')->where('restaurant_id', $restaurantId)->where('is_active', true)->orderByDesc('is_main')->orderBy('id')->first();
         abort_unless($branch, 422, 'The branch for this order is closed right now.');
 
-        return DB::transaction(function () use ($v, $user, $restaurantId, $items, $branch, $cart) {
+        // the branch must be open when the food is wanted
+        $at = \App\Services\PlatformSettings::now();
+        $hours = json_decode($branch->operating_hours ?? 'null', true);
+        $holidays = json_decode($branch->holiday_dates ?? 'null', true);
+        abort_unless(
+            \App\Services\OpeningHours::isOpen($hours, $holidays, $at),
+            422,
+            'The restaurant is closed right now (today: ' . \App\Services\OpeningHours::todayLabel($hours, $at) . ').'
+        );
+
+        return DB::transaction(function () use ($v, $user, $restaurantId, $items, $branch, $cart, $isPickup) {
+            // dishes with a stock count: reserve them now (aborts when one just sold out)
+            \App\Services\StockService::reserve($items);
             $addressId = $v['address_id'] ?? null;
-            if (!$addressId) {
+            if (!$addressId && !$isPickup) {
                 $lat = (float) ($v['latitude'] ?? 0);
                 $lng = (float) ($v['longitude'] ?? 0);
                 $addressId = DB::table('customer_addresses')->insertGetId([
@@ -345,7 +363,9 @@ class CartController extends Controller
             }
 
             // auto-accept (ordering.auto_accept_orders) skips the pending queue
-            $autoAccept = \App\Services\PlatformSettings::bool('auto_accept_orders', true);
+            // an order paid online waits for the payment first: it is accepted when the money arrives
+            $autoAccept = \App\Services\PlatformSettings::bool('auto_accept_orders', true)
+                && !in_array($v['payment_method'], \App\Models\Scopes\PaidOrdersScope::ONLINE, true);
 
             $order = Order::create([
                 'order_number' => 'ORD-' . now()->format('Ymd') . '-' . Str::random(6),
@@ -365,7 +385,7 @@ class CartController extends Controller
                 'is_paid' => false,
                 'customer_notes' => $v['notes'] ?? null,
                 // platform commission (no subscription): deducted from the food subtotal, the rest is the restaurant's payout
-                'meta' => ['contact_phone' => $v['phone'], 'unit_details' => $v['address_details'] ?? null]
+                'meta' => ['contact_phone' => $v['phone'], 'unit_details' => $v['address_details'] ?? null, 'pickup' => $isPickup]
                     + $split
                     + ($coupon ? ['coupon' => ['code' => $coupon['promotion']->code, 'discount' => $discount, 'funded_by' => $coupon['promotion']->restaurant_id ? 'restaurant' : 'platform']] : []),
             ]);

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 /** A customer's own orders: history, live tracking, and an order-update notification feed. */
 class MyOrderController extends Controller
 {
-    private const ONLINE = ['aba_khqr', 'card'];
+    private const ONLINE = \App\Models\Scopes\PaidOrdersScope::ONLINE;
     private const DONE = ['delivered', 'cancelled', 'rejected'];
 
     /** Orders that really exist for the customer (not an online payment that was abandoned). */
@@ -21,7 +21,7 @@ class MyOrderController extends Controller
             })
             ->where(function ($q) {
                 // an online order still waiting for its payment is not an order yet
-                $q->whereNotIn('payment_method', self::ONLINE)->orWhere('is_paid', true)->orWhere('status', '!=', 'pending');
+                $q->whereNotIn('payment_method', self::ONLINE)->orWhere('is_paid', true);
             });
     }
 
@@ -42,6 +42,7 @@ class MyOrderController extends Controller
             'total' => (float) $o->total,
             'payment_method' => $o->payment_method,
             'is_paid' => (bool) $o->is_paid,
+            'pickup' => $o->payment_method === 'pickup',
             'created_at' => $this->iso($o->created_at),
             'restaurant' => [
                 'id' => $o->restaurant_id,
@@ -50,6 +51,35 @@ class MyOrderController extends Controller
             ],
             'items' => ($items->get($o->id) ?? collect())->map(fn ($i) => ['name' => $i->item_name, 'quantity' => (int) $i->quantity])->values(),
         ])->values()]);
+    }
+
+    /** Puts the dishes of a past order back into the cart (dishes that are gone are skipped). */
+    public function reorder(Request $request, int $id)
+    {
+        $uid = $request->user()->id;
+        $o = $this->base($uid)->where('id', $id)->first();
+        abort_unless($o, 404, 'Order not found');
+
+        $cart = app(CartController::class);
+        $added = 0;
+        foreach (DB::table('order_items')->where('order_id', $o->id)->get() as $line) {
+            $mods = collect(json_decode($line->selected_modifiers ?? '[]', true) ?: [])
+                ->map(fn ($m) => is_array($m) ? ($m['id'] ?? null) : $m)->filter()->values()->all();
+            try {
+                $cart->addLine($uid, (int) $line->menu_item_id, (int) $line->quantity, $mods);
+                $added++;
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                // dish no longer available: leave it out
+            }
+        }
+        abort_if($added === 0, 422, 'None of the dishes from this order are available any more.');
+
+        return response()->json([
+            'restaurant_id' => $o->restaurant_id,
+            'added' => $added,
+            'skipped' => DB::table('order_items')->where('order_id', $o->id)->count() - $added,
+            'data' => $cart->payload($uid),
+        ]);
     }
 
     private function iso($v): ?string
@@ -65,7 +95,11 @@ class MyOrderController extends Controller
         $start = $o->preparing_at ?? $o->accepted_at ?? $o->created_at;
         $elapsed = max(0, now()->diffInMinutes(\Carbon\Carbon::parse($start), true));
         $remaining = in_array($o->status, ['ready', 'dispatched', 'delivered'], true) ? 0 : max(2, $prep - (int) $elapsed);
-        return ['prep_minutes' => $prep, 'prep_remaining_minutes' => $remaining];
+        $total = \App\Services\EtaService::for($o);
+        return [
+            'prep_minutes' => $prep, 'prep_remaining_minutes' => $remaining,
+            'minutes' => $total['minutes'] ?? null, 'at' => $total['at'] ?? null,
+        ];
     }
 
     public function show(Request $request, int $id)
@@ -81,6 +115,8 @@ class MyOrderController extends Controller
             ->selectRaw('label, address, details, city, ST_Y(location) as lat, ST_X(location) as lng')->first() : null;
         $items = DB::table('order_items')->where('order_id', $o->id)->get();
         $meta = json_decode($o->meta ?? '[]', true) ?: [];
+        $review = DB::table('comments')->where('commentable_type', \App\Models\Order::class)->where('commentable_id', $o->id)->where('user_id', $uid)->first();
+        $reviewed = (bool) $review;
 
         $assignment = DB::table('delivery_assignments')->where('order_id', $o->id)->first();
         $rider = null;
@@ -109,6 +145,10 @@ class MyOrderController extends Controller
             'payment_method' => $o->payment_method,
             'is_paid' => (bool) $o->is_paid,
             'notes' => $o->customer_notes,
+            'pickup' => $o->payment_method === 'pickup',
+            'refund' => $o->refunded_at ? ['amount' => (float) $o->refund_amount, 'at' => $this->iso($o->refunded_at), 'reason' => $o->refund_reason] : null,
+            'can_review' => $o->status === 'delivered' && !$reviewed,
+            'review' => $review ? ['rating' => (int) $review->rating, 'content' => $review->content] : null,
             'reject_reason' => $meta['reject_reason'] ?? null,
             'restaurant' => ['id' => $o->restaurant_id, 'name' => $restaurant->name ?? '', 'logo_url' => ($restaurant->logo ?? null) ? asset('storage/' . $restaurant->logo) : null],
             'branch' => $branch ? [

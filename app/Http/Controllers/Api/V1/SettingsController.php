@@ -26,7 +26,8 @@ class SettingsController extends Controller
         'platform_name' => ['string', 'general', 'required|string|max:120'],
         'support_email' => ['string', 'general', 'nullable|email|max:160'],
         'timezone' => ['string', 'general', 'required|string|max:64|timezone'],
-        'currency' => ['string', 'ordering', 'required|in:USD,KHR,THB,VND'],
+        'currency' => ['string', 'ordering', 'required|in:USD,KHR'],
+        'exchange_rate' => ['number', 'ordering', 'required|numeric|min:1000|max:10000'],
         'prep_time_minutes' => ['integer', 'ordering', 'required|integer|min:1|max:240'],
         'auto_accept_orders' => ['boolean', 'ordering', 'nullable'],
 

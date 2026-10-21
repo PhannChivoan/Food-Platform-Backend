@@ -46,9 +46,10 @@ class PayWayService
         return 'FO' . $orderId . 'T' . time();
     }
 
+    /** The order total (stored in dollars) in the platform currency, as PayWay expects it. */
     public function amount(float $total): string
     {
-        return number_format($total, 2, '.', '');
+        return PlatformSettings::payable($total);
     }
 
     /** generate-qr, exactly as in checkout-sample.php. */
@@ -56,7 +57,7 @@ class PayWayService
     {
         $request_time = $this->now();
         $merchant_id = config('payway.merchant_id');
-        $currency = config('payway.currency');
+        $currency = PlatformSettings::currency(); // USD or KHR
         $payment_option = 'abapay_khqr';
         //$lifetime = 6;
         $purchase_type = 'purchase';

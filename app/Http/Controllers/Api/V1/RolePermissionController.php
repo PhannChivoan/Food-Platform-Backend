@@ -30,6 +30,7 @@ class RolePermissionController extends Controller
     {
         $request->validate(['name' => 'required|string|unique:roles']);
         $role = Role::create(['name' => $request->name, 'guard_name' => 'web']);
+        ActivityLog::record('role_created', $role, ['name' => $role->name]);
         return response()->json([
             'id' => $role->id,
             'name' => $role->name,
@@ -52,7 +53,9 @@ class RolePermissionController extends Controller
     public function update(Request $request, Role $role)
     {
         $request->validate(['name' => 'required|string|unique:roles,name,' . $role->id]);
+        $before = $role->name;
         $role->update(['name' => $request->name]);
+        ActivityLog::record('role_renamed', $role, [], $before, $role->name);
         return response()->json([
             'id' => $role->id,
             'name' => $role->name,
@@ -63,6 +66,7 @@ class RolePermissionController extends Controller
 
     public function destroy(Role $role)
     {
+        ActivityLog::record('role_deleted', $role, ['name' => $role->name]);
         $role->delete();
         return response()->json(['message' => 'Role deleted.']);
     }
@@ -72,9 +76,10 @@ class RolePermissionController extends Controller
         $permissions = Permission::all()->map(fn ($p) => [
             'id' => $p->id,
             'name' => $p->name,
-            'description' => $p->description ?? '',
-            'group' => self::groupFor($p->name),
-        ]);
+            'description' => $p->description ?? self::moduleDescription($p->name),
+            'group' => self::moduleLabels()[explode('.', $p->name)[0]] ?? self::groupFor($p->name),
+            'module' => str_contains($p->name, '.'),
+        ])->sortBy([['module', 'desc'], ['group', 'asc']])->values();
 
         return response()->json($permissions);
     }
@@ -87,6 +92,7 @@ class RolePermissionController extends Controller
             return response()->json(['message' => 'Permission not found.'], 404);
         }
         $role->givePermissionTo($permission);
+        ActivityLog::record('permission_granted', $role, ['role' => $role->name, 'permission' => $permission->name]);
         return response()->json(['message' => 'Permission assigned.']);
     }
 
@@ -97,6 +103,7 @@ class RolePermissionController extends Controller
             return response()->json(['message' => 'Permission not found.'], 404);
         }
         $role->revokePermissionTo($permission);
+        ActivityLog::record('permission_revoked', $role, ['role' => $role->name, 'permission' => $permission->name]);
         return response()->json(['message' => 'Permission revoked.']);
     }
 
@@ -109,7 +116,13 @@ class RolePermissionController extends Controller
 
         $permNames = $request->permissions;
         $validPerms = Permission::whereIn('name', $permNames)->pluck('name')->toArray();
+        $before = $role->permissions()->pluck('name')->all();
         $role->syncPermissions($validPerms);
+        $added = array_values(array_diff($validPerms, $before));
+        $removed = array_values(array_diff($before, $validPerms));
+        if ($added || $removed) {
+            ActivityLog::record('permissions_changed', $role, ['role' => $role->name, 'granted' => $added, 'revoked' => $removed]);
+        }
 
         return response()->json([
             'message' => 'Permissions synced.',
@@ -125,6 +138,27 @@ class RolePermissionController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(20);
         return response()->json($logs);
+    }
+
+    /** navigation key => page label, used to group the "<page>.<action>" permissions */
+    private static function moduleLabels(): array
+    {
+        return once(fn () => DB::table('navigation_items')->whereNotNull('path')->pluck('label', 'key')->all());
+    }
+
+    private static function moduleDescription(string $name): string
+    {
+        if (!str_contains($name, '.')) return '';
+        [$key, $action] = explode('.', $name, 2);
+        $label = self::moduleLabels()[$key] ?? $key;
+
+        return match ($action) {
+            'view' => "Open and read $label",
+            'create' => "Add new records in $label",
+            'update' => "Edit and change status of records in $label",
+            'delete' => "Delete records in $label",
+            default => '',
+        };
     }
 
     private static function userCount(Role $role): int

@@ -16,6 +16,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // behind Northflank's load balancer: trust X-Forwarded-* so URLs are https
         $middleware->trustProxies(at: '*');
         $middleware->append(\App\Http\Middleware\ApplyPlatformTimezone::class);
+        // refuse a role without permission BEFORE route-model binding can answer 404, so a missing record never leaks
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\EnforceModuleAccess::class,
+        );
         $middleware->alias([
             'auth' => \App\Http\Middleware\Authenticate::class,
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
@@ -23,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'conditional.get' => \App\Http\Middleware\ConditionalGet::class,
             'access.window' => \App\Http\Middleware\EnforceAccessWindow::class,
+            'module.access' => \App\Http\Middleware\EnforceModuleAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

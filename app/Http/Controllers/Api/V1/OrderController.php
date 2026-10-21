@@ -475,10 +475,58 @@ class OrderController extends Controller
         return response()->json($order);
     }
 
+    /** A pickup order was collected by the customer, who paid at the counter. */
+    public function markPickedUp(Order $order)
+    {
+        abort_unless($order->payment_method === 'pickup', 422, 'Only pickup orders are collected at the restaurant.');
+        abort_unless($order->status === 'ready', 422, 'Mark the order ready first.');
+
+        $order->update(['status' => 'delivered', 'delivered_at' => now(), 'is_paid' => true]);
+        if (class_exists(OrderCompleted::class)) {
+            OrderCompleted::dispatch($order->fresh());
+        }
+
+        return response()->json($order->fresh());
+    }
+
     public function cancel(Order $order)
     {
         $order->update(['status' => 'cancelled', 'cancelled_at' => now()]);
         return response()->json($order);
+    }
+
+    /**
+     * Money back for a paid order that was cancelled / rejected (or a part of it).
+     * ABA / card money is returned through PayWay's portal; this records it and keeps the books straight.
+     */
+    public function refund(Request $request, Order $order)
+    {
+        $v = $request->validate([
+            'amount' => 'nullable|numeric|min:0.01',
+            'reason' => 'required|string|max:255',
+        ]);
+
+        abort_unless($order->is_paid, 422, 'This order was not paid, so there is nothing to refund.');
+        abort_if($order->refunded_at, 422, 'This order was already refunded.');
+        abort_unless(in_array($order->status, ['cancelled', 'rejected', 'delivered'], true), 422, 'Cancel or reject the order before refunding it.');
+
+        $amount = round((float) ($v['amount'] ?? $order->total), 2);
+        abort_if($amount > (float) $order->total, 422, 'The refund cannot be more than the order total.');
+
+        $order->update([
+            'refunded_at' => now(),
+            'refund_amount' => $amount,
+            'refund_reason' => $v['reason'],
+            'meta->payment_status' => 'refunded',
+        ]);
+
+        \App\Models\ActivityLog::create([
+            'loggable_type' => Order::class, 'loggable_id' => $order->id, 'user_id' => $request->user()->id,
+            'event' => 'order_refunded', 'new_value' => (string) $amount,
+            'metadata' => ['reason' => $v['reason'], 'method' => $order->payment_method], 'created_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Refund recorded.', 'refund_amount' => $amount, 'order' => $order->fresh()]);
     }
 
     public function timeline(Order $order)

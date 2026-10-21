@@ -18,11 +18,13 @@ class User extends Authenticatable
         'name', 'email', 'password', 'phone', 'avatar', 'role', 'is_active', 'last_login_at'
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'two_factor_secret'];
     protected $casts = [
         'email_verified_at' => 'datetime',
         'last_login_at' => 'datetime',
         'is_active' => 'boolean',
+        'locked_until' => 'datetime',
+        'two_factor_enabled' => 'boolean',
     ];
 
     // Relationships

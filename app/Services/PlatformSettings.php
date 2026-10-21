@@ -85,6 +85,39 @@ class PlatformSettings
     }
 
     /** Payment methods customers may pick, derived from payments settings. */
+    /** The only currencies the platform (and ABA PayWay) works in. Prices are stored in US dollars. */
+    public const CURRENCIES = ['USD', 'KHR'];
+
+    /** Currency shown to customers: USD or KHR (anything else falls back to USD). */
+    public static function currency(): string
+    {
+        $c = strtoupper((string) self::get('currency', 'USD'));
+
+        return in_array($c, self::CURRENCIES, true) ? $c : 'USD';
+    }
+
+    /** Riel per 1 US dollar, used when the platform currency is KHR. */
+    public static function exchangeRate(): float
+    {
+        return max(1000.0, min(10000.0, self::float('exchange_rate', 4100)));
+    }
+
+    /** True while the saved currency is one PayWay can charge (USD or KHR). Online payment is switched off otherwise. */
+    public static function onlinePaymentsSupported(): bool
+    {
+        return in_array(strtoupper((string) self::get('currency', 'USD')), self::CURRENCIES, true);
+    }
+
+    /** An amount stored in dollars, as PayWay wants it in the platform currency: USD "4.50", KHR whole riel "18500". */
+    public static function payable(float $usd): string
+    {
+        if (self::currency() === 'KHR') {
+            return number_format(round($usd * self::exchangeRate() / 100) * 100, 0, '.', '');
+        }
+
+        return number_format($usd, 2, '.', '');
+    }
+
     public static function paymentMethods(): array
     {
         $methods = [];
@@ -94,11 +127,17 @@ class PlatformSettings
         }
 
         // the default provider decides which online option is offered
-        match (self::get('payment_provider', 'cod')) {
-            'aba' => $methods[] = 'aba_khqr',
-            'stripe' => $methods[] = 'card',
-            default => null,
-        };
+        // online payment only works in USD or KHR: any other saved currency hides ABA and card
+        if (self::onlinePaymentsSupported()) {
+            match (self::get('payment_provider', 'cod')) {
+                'aba' => $methods[] = 'aba_khqr',
+                'stripe' => $methods[] = 'card',
+                default => null,
+            };
+        }
+
+        // collecting the order at the restaurant (and paying there) is always possible
+        $methods[] = 'pickup';
 
         return array_values(array_unique($methods));
     }
@@ -109,7 +148,8 @@ class PlatformSettings
         return [
             'platform_name' => self::get('platform_name', 'FoodOrder Platform'),
             'support_email' => self::get('support_email', ''),
-            'currency' => self::get('currency', 'USD'),
+            'currency' => self::currency(),
+            'exchange_rate' => self::exchangeRate(),
             'timezone' => self::timezone(),
             'brand_logo' => self::assetUrl('brand_logo'),
             'brand_favicon' => self::assetUrl('brand_favicon'),

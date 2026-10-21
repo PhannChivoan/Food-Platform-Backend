@@ -104,6 +104,26 @@ class PromotionController extends Controller
         return response()->json($promotion);
     }
 
+    /** Switch many promotions on / off at once. */
+    public function bulkUpdate(Request $request)
+    {
+        $v = $request->validate([
+            'ids' => 'required|array|min:1|max:500', 'ids.*' => 'integer',
+            'action' => 'required|in:activate,deactivate',
+        ]);
+        $count = Promotion::whereIn('id', $v['ids'])->update(['is_active' => $v['action'] === 'activate']);
+
+        return response()->json(['message' => "Updated {$count} promotion(s).", 'count' => $count]);
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $v = $request->validate(['ids' => 'required|array|min:1|max:500', 'ids.*' => 'integer']);
+        $count = Promotion::whereIn('id', $v['ids'])->delete();
+
+        return response()->json(['message' => "Deleted {$count} promotion(s).", 'count' => $count]);
+    }
+
     public function destroy(Promotion $promotion)
     {
         $promotion->delete();

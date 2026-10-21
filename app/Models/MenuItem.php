@@ -9,7 +9,7 @@ class MenuItem extends Model
     protected $fillable = [
         'restaurant_id', 'branch_id', 'category_id', 'name', 'slug', 'description',
         'price', 'discounted_price', 'image', 'is_available', 'is_featured',
-        'options', 'prep_time_minutes'
+        'options', 'prep_time_minutes', 'stock_quantity'
     ];
 
     protected $casts = [

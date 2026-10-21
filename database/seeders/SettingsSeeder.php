@@ -19,6 +19,7 @@ class SettingsSeeder extends Seeder
 
             // ── Ordering ──
             ['key' => 'currency', 'value' => 'USD', 'type' => 'string', 'group' => 'ordering'],
+            ['key' => 'exchange_rate', 'value' => '4100', 'type' => 'number', 'group' => 'ordering'],
             ['key' => 'prep_time_minutes', 'value' => '30', 'type' => 'integer', 'group' => 'ordering'],
             ['key' => 'auto_accept_orders', 'value' => 'true', 'type' => 'boolean', 'group' => 'ordering'],
 

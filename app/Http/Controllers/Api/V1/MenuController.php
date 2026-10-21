@@ -341,6 +341,7 @@ class MenuController extends Controller
             'price' => $isUpdate ? 'sometimes|numeric|min:0' : 'required|numeric|min:0',
             'discounted_price' => 'nullable|numeric|min:0',
             'prep_time_minutes' => 'nullable|integer',
+            'stock_quantity' => 'nullable|integer|min:0|max:100000',
             'is_available' => 'sometimes|in:0,1,true,false',
             'is_featured' => 'sometimes|in:0,1,true,false',
             'options' => 'nullable|array',
@@ -383,6 +384,50 @@ class MenuController extends Controller
         MenuItem::whereIn('id', $request->item_ids)->where('restaurant_id', $restaurant->id)
                 ->update(['is_available' => $request->available]);
         return response()->json(['message' => 'Bulk update complete']);
+    }
+
+    /** Change many dishes at once: price %, availability, stock, or delete. */
+    public function bulkUpdate(Request $request, Restaurant $restaurant)
+    {
+        $v = $request->validate([
+            'item_ids' => 'required|array|min:1|max:500',
+            'item_ids.*' => 'integer',
+            'action' => 'required|in:available,unavailable,price_percent,set_stock,feature,unfeature',
+            'value' => 'nullable|numeric',
+        ]);
+
+        $items = MenuItem::whereIn('id', $v['item_ids'])->where('restaurant_id', $restaurant->id);
+        $count = (clone $items)->count();
+
+        switch ($v['action']) {
+            case 'available': $items->update(['is_available' => true]); break;
+            case 'unavailable': $items->update(['is_available' => false]); break;
+            case 'feature': $items->update(['is_featured' => true]); break;
+            case 'unfeature': $items->update(['is_featured' => false]); break;
+            case 'set_stock':
+                abort_if(($v['value'] ?? null) === null || $v['value'] < 0, 422, 'Enter a stock quantity of 0 or more.');
+                $items->update(['stock_quantity' => (int) $v['value'], 'is_available' => (int) $v['value'] > 0]);
+                break;
+            case 'price_percent':
+                abort_if(($v['value'] ?? null) === null || $v['value'] <= -100 || $v['value'] > 500, 422, 'Enter a percentage between -99 and 500.');
+                $factor = 1 + ((float) $v['value'] / 100);
+                $items->update([
+                    'price' => \Illuminate\Support\Facades\DB::raw('ROUND(price * ' . $factor . ', 2)'),
+                    'discounted_price' => \Illuminate\Support\Facades\DB::raw('IF(discounted_price IS NULL, NULL, ROUND(discounted_price * ' . $factor . ', 2))'),
+                ]);
+                break;
+        }
+
+        return response()->json(['message' => "Updated {$count} dish(es).", 'count' => $count]);
+    }
+
+    /** Delete many dishes at once. */
+    public function bulkDelete(Request $request, Restaurant $restaurant)
+    {
+        $v = $request->validate(['item_ids' => 'required|array|min:1|max:500', 'item_ids.*' => 'integer']);
+        $count = MenuItem::whereIn('id', $v['item_ids'])->where('restaurant_id', $restaurant->id)->delete();
+
+        return response()->json(['message' => "Deleted {$count} dish(es).", 'count' => $count]);
     }
 
     // ---------- Modifier Groups ----------

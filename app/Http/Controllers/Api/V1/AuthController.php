@@ -55,6 +55,7 @@ class AuthController extends Controller
         $request->validate([
             'email'    => 'required|email',
             'password' => 'required|string',
+            'otp'      => 'nullable|string|max:12',
         ]);
 
         // Throttle login attempts: 5 attempts per minute per email/IP
@@ -67,12 +68,43 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
+        // account lockout: too many wrong passwords / codes in a row lock the account for a while
+        if ($user && $user->locked_until && $user->locked_until->isFuture()) {
+            $minutes = (int) ceil(now()->diffInSeconds($user->locked_until, true) / 60);
+            return response()->json([
+                'message' => "This account is locked after too many failed sign-ins. Try again in {$minutes} minute(s).",
+                'error' => 'account_locked',
+            ], 423);
+        }
+
         if (!$user || !Hash::check($request->password, $user->password)) {
             RateLimiter::hit($key, 60);
+            $this->registerFailure($user);
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
+
+        // two-factor: the password is right, now ask for the authenticator code
+        if ($user->two_factor_enabled) {
+            if (!$request->filled('otp')) {
+                return response()->json([
+                    'message' => 'Enter the 6-digit code from your authenticator app.',
+                    'two_factor_required' => true,
+                ], 422);
+            }
+            $secret = \Illuminate\Support\Facades\Crypt::decryptString($user->two_factor_secret);
+            if (!\App\Services\TwoFactor::verify($secret, $request->otp)) {
+                RateLimiter::hit($key, 60);
+                $this->registerFailure($user);
+                return response()->json([
+                    'message' => 'That code is not correct.',
+                    'two_factor_required' => true,
+                ], 422);
+            }
+        }
+
+        $user->forceFill(['failed_logins' => 0, 'locked_until' => null])->save();
 
         // Clear rate limiter on successful login
         RateLimiter::clear($key);
@@ -87,6 +119,19 @@ class AuthController extends Controller
             'user'    => $user->only(['id', 'name', 'email', 'role']),
             'token'   => $token,
         ]);
+    }
+
+    /** 10 wrong attempts in a row lock the account for 15 minutes. */
+    private function registerFailure(?User $user): void
+    {
+        if (!$user) {
+            return;
+        }
+        $failed = $user->failed_logins + 1;
+        $user->forceFill([
+            'failed_logins' => $failed >= 10 ? 0 : $failed,
+            'locked_until' => $failed >= 10 ? now()->addMinutes(15) : $user->locked_until,
+        ])->save();
     }
 
     /**

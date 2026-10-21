@@ -62,15 +62,20 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
     Route::get('/public/categories', [\App\Http\Controllers\Api\V1\PublicRestaurantController::class, 'categories']);
     Route::get('/public/restaurants/{id}', [\App\Http\Controllers\Api\V1\PublicRestaurantController::class, 'show'])->whereNumber('id');
     Route::get('/public/items/{id}', [\App\Http\Controllers\Api\V1\PublicRestaurantController::class, 'item'])->whereNumber('id');
+    Route::get('/public/restaurants/{id}/reviews', [\App\Http\Controllers\Api\V1\ReviewController::class, 'index'])->whereNumber('id');
 
     // ---------- PROTECTED ROUTES (Requires Valid Token) ----------
-    Route::middleware(['auth:sanctum', 'access.window'])->group(function () {
+    Route::middleware(['auth:sanctum', 'access.window', 'module.access'])->group(function () {
 
         // â”€â”€â”€ AUTH (Profile, Logout, Refresh) â”€â”€â”€
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::post('/auth/refresh', [AuthController::class, 'refresh']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
+        Route::get('/auth/2fa', [\App\Http\Controllers\Api\V1\TwoFactorController::class, 'status']);
+        Route::post('/auth/2fa/setup', [\App\Http\Controllers\Api\V1\TwoFactorController::class, 'setup']);
+        Route::post('/auth/2fa/enable', [\App\Http\Controllers\Api\V1\TwoFactorController::class, 'enable']);
+        Route::post('/auth/2fa/disable', [\App\Http\Controllers\Api\V1\TwoFactorController::class, 'disable']);
 
         // â”€â”€â”€ DASHBOARD (KPI Stats) â”€â”€â”€
         Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
@@ -89,6 +94,11 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         // ─── MY ORDERS: history, live tracking, notifications ───
         Route::get('/my/orders', [\App\Http\Controllers\Api\V1\MyOrderController::class, 'index']);
         Route::get('/my/orders/{id}', [\App\Http\Controllers\Api\V1\MyOrderController::class, 'show'])->whereNumber('id');
+        Route::post('/my/orders/{id}/reorder', [\App\Http\Controllers\Api\V1\MyOrderController::class, 'reorder'])->whereNumber('id');
+        Route::post('/my/orders/{id}/review', [\App\Http\Controllers\Api\V1\ReviewController::class, 'store'])->whereNumber('id');
+        Route::get('/my/favorites', [\App\Http\Controllers\Api\V1\FavoriteController::class, 'index']);
+        Route::post('/my/favorites/{restaurantId}', [\App\Http\Controllers\Api\V1\FavoriteController::class, 'store'])->whereNumber('restaurantId');
+        Route::delete('/my/favorites/{restaurantId}', [\App\Http\Controllers\Api\V1\FavoriteController::class, 'destroy'])->whereNumber('restaurantId');
         Route::get('/my/notifications', [\App\Http\Controllers\Api\V1\MyOrderController::class, 'notifications']);
         Route::post('/my/notifications/read', [\App\Http\Controllers\Api\V1\MyOrderController::class, 'markNotificationsRead']);
         // ─── ONLINE PAYMENT (ABA PayWay) ───
@@ -161,6 +171,8 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::delete('/restaurants/{restaurant}/items/{item}', [MenuController::class, 'deleteItem']);
         Route::patch('/restaurants/{restaurant}/items/{item}/toggle', [MenuController::class, 'toggleAvailability']);
         Route::post('/restaurants/{restaurant}/items/bulk-toggle', [MenuController::class, 'bulkToggleAvailability']);
+        Route::post('/restaurants/{restaurant}/items/bulk-update', [MenuController::class, 'bulkUpdate']);
+        Route::post('/restaurants/{restaurant}/items/bulk-delete', [MenuController::class, 'bulkDelete']);
         Route::post('/restaurants/{restaurant}/menu/import', [MenuController::class, 'import']);
         Route::get('/restaurants/{restaurant}/menu/export', [MenuController::class, 'export']);
         Route::get('/restaurants/{restaurant}/modifier-groups', [MenuController::class, 'getModifierGroups']);
@@ -184,6 +196,8 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::patch('/orders/{order}/prepare', [OrderController::class, 'startPreparing']);
         Route::patch('/orders/{order}/ready', [OrderController::class, 'markReady']);
         Route::patch('/orders/{order}/cancel', [OrderController::class, 'cancel']);
+        Route::patch('/orders/{order}/picked-up', [OrderController::class, 'markPickedUp']);
+        Route::post('/orders/{order}/refund', [OrderController::class, 'refund']);
         Route::get('/orders/{order}/timeline', [OrderController::class, 'timeline']);
         Route::get('/kitchen/metrics', [OrderController::class, 'kitchenMetrics']);
 
@@ -249,7 +263,11 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::get('/access-windows/status', [AccessWindowController::class, 'status']);
         Route::apiResource('/access-windows', AccessWindowController::class);
         Route::patch('/access-windows/{accessWindow}/toggle', [AccessWindowController::class, 'toggle']);
+        Route::post('/promotions/bulk-update', [PromotionController::class, 'bulkUpdate']);
+        Route::post('/promotions/bulk-delete', [PromotionController::class, 'bulkDelete']);
         Route::apiResource('/promotions', PromotionController::class);
+        Route::get('/exports/orders', [\App\Http\Controllers\Api\V1\ExportController::class, 'orders']);
+        Route::get('/exports/revenue', [\App\Http\Controllers\Api\V1\ExportController::class, 'revenue']);
         Route::get('/loyalty/rules', [PromotionController::class, 'getLoyaltyRules']);
         Route::put('/loyalty/rules', [PromotionController::class, 'updateLoyaltyRules']);
         Route::get('/loyalty/transactions', [PromotionController::class, 'loyaltyTransactions']);

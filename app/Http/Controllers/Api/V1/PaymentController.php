@@ -40,11 +40,13 @@ class PaymentController extends Controller
         }
 
         if ($v['method'] === 'card') {
+            abort_unless(\App\Services\PlatformSettings::onlinePaymentsSupported(), 422, 'Online payment works only in USD or KHR.');
             // card details are typed on our own form and sent to card() — nothing to prepare at PayWay
             $this->saveMeta($id, $this->meta($o), ['payment_method' => 'card']);
             return response()->json(['type' => 'card_form', 'method' => 'card', 'amount' => (float) $o->total]);
         }
 
+        abort_unless(\App\Services\PlatformSettings::onlinePaymentsSupported(), 422, 'Online payment works only in USD or KHR.');
         abort_unless($payway->configured(), 422, 'Online payment is not configured yet (missing PayWay merchant ID / API key).');
 
         $meta = $this->meta($o);
@@ -115,7 +117,7 @@ class PaymentController extends Controller
         $meta = $this->meta($o);
         $meta['payment_status'] = 'paid';
         $meta['card'] = ['brand' => $brand, 'last4' => substr($pan, -4), 'simulated' => true];
-        $this->saveMeta($id, $meta, ['is_paid' => true]);
+        $this->markPaid($id, $meta);
 
         return response()->json(['paid' => true, 'brand' => $brand, 'last4' => substr($pan, -4)]);
     }
@@ -147,7 +149,7 @@ class PaymentController extends Controller
             return response()->json(['paid' => true]);
         }
         abort_unless(
-            in_array($o->payment_method, ['aba_khqr', 'card'], true) && $o->status === 'pending',
+            in_array($o->payment_method, ['aba_khqr', 'card'], true) && in_array($o->status, ['pending', 'accepted'], true),
             422,
             'This order can no longer be cancelled here.'
         );
@@ -159,6 +161,7 @@ class PaymentController extends Controller
             $meta = $this->meta($o);
             $meta['payment_status'] = 'cancelled';
             $this->saveMeta($o->id, $meta, ['status' => 'cancelled', 'cancelled_at' => now()]);
+            \App\Services\StockService::restore($o->id);
 
             foreach (DB::table('order_items')->where('order_id', $o->id)->get() as $line) {
                 $mods = collect(json_decode($line->selected_modifiers ?? '[]', true) ?: [])
@@ -175,6 +178,17 @@ class PaymentController extends Controller
     }
 
     /** Polled by the checkout page. Asks PayWay directly; marks the order paid once approved. */
+    /** Payment received: mark it paid and, with auto-accept on, hand the order to the kitchen. */
+    private function markPaid(int $id, array $meta): void
+    {
+        $extra = ['is_paid' => true];
+        $order = DB::table('orders')->where('id', $id)->first(['status']);
+        if ($order?->status === 'pending' && \App\Services\PlatformSettings::bool('auto_accept_orders', true)) {
+            $extra += ['status' => 'accepted', 'accepted_at' => now()];
+        }
+        $this->saveMeta($id, $meta, $extra);
+    }
+
     public function status(Request $request, PayWayService $payway, int $id)
     {
         $o = $this->myOrder($request, $id);
@@ -188,7 +202,7 @@ class PaymentController extends Controller
                 if ($payway->isApproved($tran)) {
                     $meta = $this->meta($o);
                     $meta['payment_status'] = 'paid';
-                    $this->saveMeta($o->id, $meta, ['is_paid' => true]);
+                    $this->markPaid($o->id, $meta);
                     $o->is_paid = 1;
                 }
             } catch (\Throwable $e) {

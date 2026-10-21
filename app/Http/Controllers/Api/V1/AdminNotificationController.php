@@ -93,6 +93,10 @@ class AdminNotificationController extends Controller
     {
         return response()->json([
             'user' => app(AuthController::class)->me($request)->getData(true),
+            // "*" = unrestricted (super admin); otherwise the "<page>.<action>" permissions the role holds
+            'permissions' => $request->user()->hasRole('super_admin')
+                ? ['*']
+                : $request->user()->getAllPermissions()->pluck('name')->filter(fn ($n) => str_contains($n, '.'))->values(),
             'navigation' => app(NavigationItemsController::class)->index($request)->getData(true)['data'] ?? [],
             'notifications' => $this->index($request)->getData(true),
             // so the shell can lock the screen and explain the access window

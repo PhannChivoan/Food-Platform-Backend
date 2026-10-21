@@ -23,6 +23,7 @@ class DispatchController extends Controller
     {
         $waitingOrders = Order::query()
             ->where('status', 'ready')
+            ->where('payment_method', '!=', 'pickup')
             ->whereDoesntHave('deliveryAssignment')
             ->with('restaurant:id,name')
             ->orderBy('ready_at')
@@ -145,6 +146,7 @@ class DispatchController extends Controller
                     ->where('assigned_at', '<=', now()->subMinutes(30))
                     ->count(),
                 'waiting_for_rider' => Order::where('status', 'ready')
+                    ->where('payment_method', '!=', 'pickup')
                     ->whereDoesntHave('deliveryAssignment')
                     ->count(),
                 'delivered_today' => $deliveredTodayCount,
@@ -540,6 +542,9 @@ class DispatchController extends Controller
         $validated = $request->validate(['rider_profile_id' => 'required|exists:rider_profiles,id']);
         $rider = RiderProfile::find($validated['rider_profile_id']);
 
+        if ($order->payment_method === 'pickup') {
+            return response()->json(['message' => 'This is a pickup order: the customer collects it at the restaurant.'], 422);
+        }
         if ($order->deliveryAssignment) {
             return response()->json(['message' => 'Order already has a rider'], 422);
         }
@@ -755,7 +760,7 @@ class DispatchController extends Controller
 
         foreach ($validated['order_ids'] as $orderId) {
             $order = Order::find($orderId);
-            if (!$order || $order->status !== 'ready' || $order->deliveryAssignment) {
+            if (!$order || $order->status !== 'ready' || $order->payment_method === 'pickup' || $order->deliveryAssignment) {
                 $skipped++;
                 continue;
             }

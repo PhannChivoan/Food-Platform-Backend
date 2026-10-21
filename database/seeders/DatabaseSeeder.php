@@ -11,6 +11,8 @@ class DatabaseSeeder extends Seeder
     $this->call([
         PermissionSeeder::class,
         NavigationSeeder::class,       // admin sidebar + which role sees what
+        ModulePermissionSeeder::class, // view/create/update/delete per menu page
+        //      // admin sidebar + which role sees what
         UserSeeder::class,
         RestaurantSeeder::class,      // this already creates shifts
         RiderSeeder::class,
