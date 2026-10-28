@@ -12,6 +12,8 @@ class MenuItem extends Model
         'options', 'prep_time_minutes', 'stock_quantity'
     ];
 
+    protected $appends = ['image_url'];
+
     protected $casts = [
         'price' => 'decimal:2',
         'discounted_price' => 'decimal:2',
