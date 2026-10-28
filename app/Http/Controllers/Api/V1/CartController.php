@@ -99,7 +99,7 @@ class CartController extends Controller
                     'unit_price' => round($unit, 2),
                     'quantity' => (int) $row->quantity,
                     'line_total' => round($line, 2),
-                    'image_url' => $d->image ? asset('storage/' . $d->image) : null,
+                    'image_url' => $d->image ? \App\Services\CloudinaryService::url($d->image) : null,
                     'available' => $available,
                 ];
             }
@@ -108,7 +108,7 @@ class CartController extends Controller
                     'id' => $r->id,
                     'name' => $r->name,
                     'cuisine_type' => $r->cuisine_type,
-                    'logo_url' => $r->logo ? asset('storage/' . $r->logo) : null,
+                    'logo_url' => $r->logo ? \App\Services\CloudinaryService::url($r->logo) : null,
                 ],
                 'branch' => $cartBranch ? ['id' => (int) $cartBranch, 'name' => $branchNames[$cartBranch] ?? null] : null,
                 'items' => $items,

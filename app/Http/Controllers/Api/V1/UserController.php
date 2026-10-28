@@ -141,7 +141,7 @@ class UserController extends Controller
 
         $avatarPath = null;
         if ($request->hasFile('avatar')) {
-            $avatarPath = $request->file('avatar')->store(self::AVATAR_DIR, self::AVATAR_DISK);
+            $avatarPath = \App\Services\CloudinaryService::upload($request->file('avatar'), self::AVATAR_DIR);
         }
 
         $plainPassword = $validated['password'] ?? strtoupper(uniqid('PWD', true));
@@ -217,7 +217,7 @@ class UserController extends Controller
 
         if ($request->hasFile('avatar')) {
             $this->deleteAvatar($user->avatar);
-            $user->avatar = $request->file('avatar')->store(self::AVATAR_DIR, self::AVATAR_DISK);
+            $user->avatar = \App\Services\CloudinaryService::upload($request->file('avatar'), self::AVATAR_DIR);
         } elseif (!empty($validated['remove_avatar'])) {
             $this->deleteAvatar($user->avatar);
             $user->avatar = null;
@@ -255,8 +255,6 @@ class UserController extends Controller
 
     private function deleteAvatar(?string $path): void
     {
-        if ($path && Storage::disk(self::AVATAR_DISK)->exists($path)) {
-            Storage::disk(self::AVATAR_DISK)->delete($path);
-        }
+        \App\Services\CloudinaryService::remove($path);
     }
 }

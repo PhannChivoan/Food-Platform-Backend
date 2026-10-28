@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Branch;
 use App\Services\BranchMenuService;
+use App\Services\CloudinaryService;
 
 class MenuController extends Controller
 {
@@ -21,12 +22,17 @@ class MenuController extends Controller
 
     protected function handleItemImage($file): string
     {
-        return $file->store(self::IMAGE_DIR, 'public');
+        return CloudinaryService::upload($file, self::IMAGE_DIR);
     }
 
     protected function deleteItemImage($path): void
     {
-        if ($path) {
+        if (! $path) {
+            return;
+        }
+        if (CloudinaryService::isCloudinaryUrl($path)) {
+            CloudinaryService::delete($path);
+        } else {
             Storage::disk('public')->delete($path);
         }
     }
@@ -302,16 +308,14 @@ class MenuController extends Controller
         $item->fill(Arr::except($validated, ['image_file', 'modifier_group_ids']));
 
         if (isset($validated['image_path'])) {
-            if ($item->image) {
-                Storage::disk('public')->delete($item->image);
+            if ($item->image && $item->image !== $validated['image_path']) {
+                $this->deleteItemImage($item->image);
             }
             $item->image = $validated['image_path'];
         }
 
         if (isset($validated['remove_image'])) {
-            if ($item->image) {
-                Storage::disk('public')->delete($item->image);
-            }
+            $this->deleteItemImage($item->image);
             $item->image = null;
         }
 

@@ -70,8 +70,8 @@ class PublicRestaurantController extends Controller
                 'description' => $r->description,
                 'cuisine_type' => $r->cuisine_type,
                 'category_id' => $r->category_id,
-                'logo_url' => $r->logo ? asset('storage/' . $r->logo) : null,
-                'cover_url' => $r->cover_image ? asset('storage/' . $r->cover_image) : null,
+                'logo_url' => $r->logo ? \App\Services\CloudinaryService::url($r->logo) : null,
+                'cover_url' => $r->cover_image ? \App\Services\CloudinaryService::url($r->cover_image) : null,
                 'branches_count' => $rBranches->count(),
                 'main_branch' => $rBranches->firstWhere('is_main', true) ?? $rBranches->first(),
                 'menu_items_count' => $rItems->count(),
@@ -81,7 +81,7 @@ class PublicRestaurantController extends Controller
                     'id' => $top->id,
                     'name' => $top->name,
                     'price' => (float) ($top->discounted_price ?? $top->price),
-                    'image_url' => $top->image ? asset('storage/' . $top->image) : null,
+                    'image_url' => $top->image ? \App\Services\CloudinaryService::url($top->image) : null,
                 ] : null,
             ];
         })->values();
@@ -128,7 +128,7 @@ class PublicRestaurantController extends Controller
             'description' => $i->description,
             'price' => (float) $i->price,
             'discounted_price' => $i->discounted_price !== null ? (float) $i->discounted_price : null,
-            'image_url' => $i->image ? asset('storage/' . $i->image) : null,
+            'image_url' => $i->image ? \App\Services\CloudinaryService::url($i->image) : null,
             'is_featured' => (bool) ($i->is_featured ?? false),
             'prep_time_minutes' => $i->prep_time_minutes ?? null,
         ];
@@ -141,8 +141,8 @@ class PublicRestaurantController extends Controller
             'name' => $r->name,
             'cuisine_type' => $r->cuisine_type,
             'description' => $r->description,
-            'logo_url' => $r->logo ? asset('storage/' . $r->logo) : null,
-            'cover_url' => $r->cover_image ? asset('storage/' . $r->cover_image) : null,
+            'logo_url' => $r->logo ? \App\Services\CloudinaryService::url($r->logo) : null,
+            'cover_url' => $r->cover_image ? \App\Services\CloudinaryService::url($r->cover_image) : null,
         ];
     }
 

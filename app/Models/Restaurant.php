@@ -74,7 +74,7 @@ class Restaurant extends Model
     // Accessors
     public function getLogoUrlAttribute()
     {
-        return $this->logo ? asset('storage/'.$this->logo) : null;
+        return $this->logo ? \App\Services\CloudinaryService::url($this->logo) : null;
     }
     protected static function booted(): void
     {

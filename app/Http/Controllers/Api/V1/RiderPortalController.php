@@ -140,7 +140,7 @@ class RiderPortalController extends Controller
                 'picked_up_at' => $a->picked_up_at,
                 'delivered_at' => $a->delivered_at,
                 'earnings' => (float) $a->earnings,
-                'proof_photo_url' => $a->proof_photo ? asset('storage/' . $a->proof_photo) : null,
+                'proof_photo_url' => $a->proof_photo ? \App\Services\CloudinaryService::url($a->proof_photo) : null,
                 'order' => [
                     'number' => $o->order_number,
                     'total' => (float) $o->total,
@@ -196,9 +196,9 @@ class RiderPortalController extends Controller
         abort_if($a->status === 'delivered', 422, 'This delivery is already completed.');
         abort_unless(in_array($a->status, ['assigned', 'picked_up'], true), 422, 'This delivery can no longer be completed.');
 
-        $path = $request->file('photo')->store('delivery_proofs', 'public');
+        $path = \App\Services\CloudinaryService::upload($request->file('photo'), 'delivery_proofs');
         DeliveryService::complete($a->id, $path);
 
-        return response()->json(['status' => 'delivered', 'proof_photo_url' => asset('storage/' . $path)]);
+        return response()->json(['status' => 'delivered', 'proof_photo_url' => \App\Services\CloudinaryService::url($path)]);
     }
 }

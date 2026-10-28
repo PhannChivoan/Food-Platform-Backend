@@ -166,6 +166,6 @@ class PlatformSettings
     private static function assetUrl(string $key): ?string
     {
         $path = PlatformSetting::where('key', $key)->value('value');
-        return $path ? asset('storage/' . $path) : null;
+        return $path ? \App\Services\CloudinaryService::url($path) : null;
     }
 }

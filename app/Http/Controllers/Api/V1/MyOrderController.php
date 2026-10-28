@@ -47,7 +47,7 @@ class MyOrderController extends Controller
             'restaurant' => [
                 'id' => $o->restaurant_id,
                 'name' => $restaurants->get($o->restaurant_id)->name ?? '',
-                'logo_url' => ($restaurants->get($o->restaurant_id)->logo ?? null) ? asset('storage/' . $restaurants->get($o->restaurant_id)->logo) : null,
+                'logo_url' => ($restaurants->get($o->restaurant_id)->logo ?? null) ? \App\Services\CloudinaryService::url($restaurants->get($o->restaurant_id)->logo) : null,
             ],
             'items' => ($items->get($o->id) ?? collect())->map(fn ($i) => ['name' => $i->item_name, 'quantity' => (int) $i->quantity])->values(),
         ])->values()]);
@@ -150,7 +150,7 @@ class MyOrderController extends Controller
             'can_review' => $o->status === 'delivered' && !$reviewed,
             'review' => $review ? ['rating' => (int) $review->rating, 'content' => $review->content] : null,
             'reject_reason' => $meta['reject_reason'] ?? null,
-            'restaurant' => ['id' => $o->restaurant_id, 'name' => $restaurant->name ?? '', 'logo_url' => ($restaurant->logo ?? null) ? asset('storage/' . $restaurant->logo) : null],
+            'restaurant' => ['id' => $o->restaurant_id, 'name' => $restaurant->name ?? '', 'logo_url' => ($restaurant->logo ?? null) ? \App\Services\CloudinaryService::url($restaurant->logo) : null],
             'branch' => $branch ? [
                 'name' => $branch->name, 'address' => trim($branch->address . ', ' . $branch->city, ', '), 'phone' => $branch->phone,
                 'lat' => $branch->lat !== null ? (float) $branch->lat : null, 'lng' => $branch->lng !== null ? (float) $branch->lng : null,

@@ -24,7 +24,7 @@ class FavoriteController extends Controller
                 'id' => $r->id,
                 'name' => $r->name,
                 'cuisine_type' => $r->cuisine_type,
-                'logo_url' => $r->logo ? asset('storage/' . $r->logo) : null,
+                'logo_url' => $r->logo ? \App\Services\CloudinaryService::url($r->logo) : null,
             ]),
         ]);
     }

@@ -98,7 +98,7 @@ class SettingsController extends Controller
         // ---- brand images -------------------------------------------------
         if ($request->hasFile('brand_logo')) {
             $this->deleteFile('brand_logo');
-            $path = $request->file('brand_logo')->store(self::BRAND_DIR, self::BRAND_DISK);
+            $path = \App\Services\CloudinaryService::upload($request->file('brand_logo'), self::BRAND_DIR);
             PlatformSetting::updateOrCreate(
                 ['key' => 'brand_logo'],
                 ['value' => $path, 'type' => 'string', 'group' => 'general'],
@@ -107,7 +107,7 @@ class SettingsController extends Controller
 
         if ($request->hasFile('brand_favicon')) {
             $this->deleteFile('brand_favicon');
-            $path = $request->file('brand_favicon')->store(self::BRAND_DIR, self::BRAND_DISK);
+            $path = \App\Services\CloudinaryService::upload($request->file('brand_favicon'), self::BRAND_DIR);
             PlatformSetting::updateOrCreate(
                 ['key' => 'brand_favicon'],
                 ['value' => $path, 'type' => 'string', 'group' => 'general'],
@@ -155,7 +155,7 @@ class SettingsController extends Controller
 
         foreach (['brand_logo', 'brand_favicon'] as $key) {
             $value = $grouped['general'][$key]['value'] ?? null;
-            $grouped['general'][$key]['url'] = $value ? asset('storage/' . $value) : null;
+            $grouped['general'][$key]['url'] = $value ? \App\Services\CloudinaryService::url($value) : null;
         }
 
         return $grouped;
@@ -164,8 +164,8 @@ class SettingsController extends Controller
     private function deleteFile(string $key): void
     {
         $setting = PlatformSetting::where('key', $key)->first();
-        if ($setting && $setting->value && !str_starts_with($setting->value, 'http')) {
-            Storage::disk(self::BRAND_DISK)->delete($setting->value);
+        if ($setting && $setting->value) {
+            \App\Services\CloudinaryService::remove($setting->value);
         }
     }
 }

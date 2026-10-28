@@ -423,7 +423,7 @@ class RestaurantController extends Controller
             'cuisine_type' => $restaurant->cuisine_type,
             'category_id' => $restaurant->category_id,
             'status' => $restaurant->status,
-            'logo_url' => $restaurant->logo ? asset('storage/'.$restaurant->logo) : null,
+            'logo_url' => $restaurant->logo ? \App\Services\CloudinaryService::url($restaurant->logo) : null,
             'owner' => $restaurant->owner?->name,
             'owner_email' => $restaurant->owner?->email,
             'verified_at' => $restaurant->verified_at?->toISOString(),
@@ -477,13 +477,11 @@ class RestaurantController extends Controller
     {
         $this->deleteLogo($previous);
 
-        return $file->store(self::LOGO_DIR, self::LOGO_DISK);
+        return \App\Services\CloudinaryService::upload($file, self::LOGO_DIR);
     }
 
     private function deleteLogo($path): void
     {
-        if ($path) {
-            Storage::disk(self::LOGO_DISK)->delete($path);
-        }
+        \App\Services\CloudinaryService::remove($path);
     }
 }

@@ -202,7 +202,7 @@ class DispatchController extends Controller
                     'eta' => $eta,
                     'eta_minutes' => $etaMinutes,
                     'assignment_status' => $assignment->status,
-                'proof_photo_url' => $assignment->proof_photo ? asset('storage/' . $assignment->proof_photo) : null,
+                'proof_photo_url' => $assignment->proof_photo ? \App\Services\CloudinaryService::url($assignment->proof_photo) : null,
                     'rider' => $assignment->rider?->user?->name ?: 'Unknown',
                     'rider_phone' => $assignment->rider?->user?->phone,
                     'vehicle' => $assignment->rider?->vehicle_type,
@@ -465,7 +465,7 @@ class DispatchController extends Controller
     {
         // Relative URLs – the UI joins them with the API origin.
         return collect($paths)
-            ->map(fn ($path) => '/storage/'.ltrim($path, '/'))
+            ->map(fn ($path) => str_starts_with($path, 'http') ? $path : '/storage/'.ltrim($path, '/'))
             ->values()
             ->all();
     }
@@ -474,7 +474,7 @@ class DispatchController extends Controller
     {
         return collect($files)
             ->filter()
-            ->map(fn ($file) => $file->store(self::DOCUMENT_DIR, self::DOCUMENT_DISK))
+            ->map(fn ($file) => \App\Services\CloudinaryService::upload($file, self::DOCUMENT_DIR))
             ->values()
             ->all();
     }
@@ -482,7 +482,7 @@ class DispatchController extends Controller
     private function deleteDocumentFiles(array $paths): void
     {
         foreach ($paths as $path) {
-            Storage::disk(self::DOCUMENT_DISK)->delete($path);
+            \App\Services\CloudinaryService::remove($path);
         }
     }
 
@@ -501,11 +501,9 @@ class DispatchController extends Controller
 
     private function storeAvatar($file, $previous = null)
     {
-        if ($previous && ! str_starts_with($previous, 'http') && ! str_starts_with($previous, '/storage')) {
-            Storage::disk(self::DOCUMENT_DISK)->delete($previous);
-        }
+        \App\Services\CloudinaryService::remove($previous);
 
-        return $file->store('riders/avatars', self::DOCUMENT_DISK);
+        return \App\Services\CloudinaryService::upload($file, 'riders/avatars');
     }
 
     private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
