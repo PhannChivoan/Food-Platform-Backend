@@ -45,7 +45,7 @@ class MenuController extends Controller
             'is_active' => 'nullable|boolean',
             'search' => 'nullable|string',
             'page' => 'nullable|integer|min:1',
-            'limit' => 'nullable|integer|min:1|max:100',
+            'limit' => 'nullable|integer|min:1|max:5000',
         ]);
 
         $page = $validated['page'] ?? 1;
@@ -158,7 +158,7 @@ class MenuController extends Controller
             'is_available' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',
             'page' => 'nullable|integer|min:1',
-            'limit' => 'nullable|integer|min:1|max:100',
+            'limit' => 'nullable|integer|min:1|max:5000',
         ]);
 
         $search = $validated['search'] ?? '';
@@ -449,7 +449,7 @@ class MenuController extends Controller
             'restaurant_id' => 'nullable|integer|exists:restaurants,id',
             'search' => 'nullable|string',
             'page' => 'nullable|integer|min:1',
-            'limit' => 'nullable|integer|min:1|max:100',
+            'limit' => 'nullable|integer|min:1|max:5000',
         ]);
 
         $page = $validated['page'] ?? 1;

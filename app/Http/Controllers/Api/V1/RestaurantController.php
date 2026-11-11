@@ -27,7 +27,7 @@ class RestaurantController extends Controller
     {
         $validated = $request->validate([
             'page' => 'nullable|integer|min:1',
-            'limit' => 'nullable|integer|min:1|max:200',
+            'limit' => 'nullable|integer|min:1|max:5000',
             'search' => 'nullable|string|max:100',
             'status' => 'nullable|string|in:pending,verified,suspended,closed',
         ]);
@@ -280,7 +280,7 @@ class RestaurantController extends Controller
     {
         $validated = $request->validate([
             'page' => 'nullable|integer|min:1',
-            'limit' => 'nullable|integer|min:1|max:100',
+            'limit' => 'nullable|integer|min:1|max:5000',
             'search' => 'nullable|string|max:100',
             'status' => 'nullable|string|in:active,inactive',
             'restaurant_id' => 'nullable|integer|exists:restaurants,id',

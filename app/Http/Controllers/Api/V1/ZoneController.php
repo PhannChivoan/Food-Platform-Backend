@@ -15,7 +15,7 @@ class ZoneController extends Controller
         $validated = $request->validate([
             'search' => 'nullable|string',
             'page' => 'nullable|integer|min:1',
-            'limit' => 'nullable|integer|min:1|max:100',
+            'limit' => 'nullable|integer|min:1|max:5000',
         ]);
 
         $page = $validated['page'] ?? 1;
