@@ -172,6 +172,134 @@ class RiderPortalController extends Controller
         return response()->json(['data' => $data]);
     }
 
+    /** A driver can carry this many unfinished deliveries at once (accepting from the open list stops there). */
+    private const MAX_ACTIVE = 3;
+
+    private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $r = 6371;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        return $r * 2 * atan2(sqrt($a), sqrt(1 - $a));
+    }
+
+    /** Orders the kitchen opened to riders and nobody has taken yet, nearest to the driver first. */
+    public function availableOrders(Request $request)
+    {
+        $request->validate(['lat' => 'nullable|numeric|between:-90,90', 'lng' => 'nullable|numeric|between:-180,180']);
+        $p = $this->profile($request);
+
+        // the phone's live position when it sent one, otherwise the last one reported to dispatch
+        $me = null;
+        if ($request->filled('lat') && $request->filled('lng')) {
+            $me = ['lat' => (float) $request->query('lat'), 'lng' => (float) $request->query('lng')];
+        } else {
+            $last = DB::table('rider_profiles')->where('id', $p->id)->selectRaw('ST_Y(current_location) as lat, ST_X(current_location) as lng')->first();
+            if ($last && $last->lat !== null) $me = ['lat' => (float) $last->lat, 'lng' => (float) $last->lng];
+        }
+
+        $orders = DB::table('orders')
+            ->where('open_to_riders', true)
+            ->whereIn('status', ['accepted', 'preparing', 'ready'])
+            ->where('payment_method', '!=', 'pickup')
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('delivery_assignments')->whereColumn('delivery_assignments.order_id', 'orders.id'))
+            ->orderBy('open_to_riders_at')
+            ->limit(50)
+            ->get();
+
+        $active = DB::table('delivery_assignments')->where('rider_profile_id', $p->id)->whereIn('status', ['assigned', 'picked_up'])->count();
+        if ($orders->isEmpty()) {
+            return response()->json(['data' => [], 'meta' => ['active' => $active, 'max_active' => self::MAX_ACTIVE, 'online' => (bool) $p->is_online]]);
+        }
+
+        $restaurants = DB::table('restaurants')->whereIn('id', $orders->pluck('restaurant_id'))->get()->keyBy('id');
+        $branches = DB::table('branches')->whereIn('id', $orders->pluck('branch_id'))
+            ->selectRaw('id, name, address, city, phone, ST_Y(location) as lat, ST_X(location) as lng')->get()->keyBy('id');
+        $customers = DB::table('users')->whereIn('id', $orders->pluck('customer_id'))->get()->keyBy('id');
+        $addresses = DB::table('customer_addresses')->whereIn('id', $orders->pluck('delivery_address_id')->filter())
+            ->selectRaw('id, label, address, details, city, ST_Y(location) as lat, ST_X(location) as lng')->get()->keyBy('id');
+        $items = DB::table('order_items')->whereIn('order_id', $orders->pluck('id'))->get()->groupBy('order_id');
+
+        $data = $orders->map(function ($o) use ($me, $restaurants, $branches, $customers, $addresses, $items) {
+            $meta = json_decode($o->meta ?? '[]', true) ?: [];
+            $b = $branches->get($o->branch_id);
+            $addr = $addresses->get($o->delivery_address_id);
+            $c = $customers->get($o->customer_id);
+            $pickup = ['lat' => isset($b->lat) ? (float) $b->lat : null, 'lng' => isset($b->lng) ? (float) $b->lng : null];
+            $drop = ['lat' => $addr && isset($addr->lat) ? (float) $addr->lat : null, 'lng' => $addr && isset($addr->lng) ? (float) $addr->lng : null];
+            $has = fn ($pt) => $pt['lat'] !== null && $pt['lng'] !== null;
+
+            return [
+                'id' => $o->id,
+                'status' => $o->status,
+                'can_accept' => $o->status === 'ready',
+                'opened_at' => $o->open_to_riders_at,
+                // same rule as the fee credited on delivery: 10% of the food subtotal, at least $1.50
+                'earnings' => max(1.5, round(((float) ($o->subtotal ?? 0)) * 0.10, 2)),
+                'to_pickup_km' => $me && $has($pickup) ? round($this->haversineKm($me['lat'], $me['lng'], $pickup['lat'], $pickup['lng']), 1) : null,
+                'trip_km' => $has($pickup) && $has($drop) ? round($this->haversineKm($pickup['lat'], $pickup['lng'], $drop['lat'], $drop['lng']), 1) : null,
+                'order' => [
+                    'number' => $o->order_number,
+                    'total' => (float) $o->total,
+                    'payment_method' => $o->payment_method,
+                    'is_paid' => (bool) $o->is_paid,
+                    'notes' => $o->customer_notes,
+                    'items' => ($items->get($o->id) ?? collect())->map(fn ($i) => ['name' => $i->item_name, 'quantity' => (int) $i->quantity])->values(),
+                ],
+                'pickup' => [
+                    'restaurant' => $restaurants->get($o->restaurant_id)->name ?? '',
+                    'branch' => $b->name ?? '',
+                    'address' => trim(($b->address ?? '') . ', ' . ($b->city ?? ''), ', '),
+                    'phone' => $b->phone ?? null,
+                ] + $pickup,
+                'dropoff' => [
+                    'customer' => $c->name ?? 'Customer',
+                    'label' => $addr->label ?? null,
+                    'address' => $addr ? trim($addr->address . ', ' . $addr->city, ', ') : null,
+                    'details' => $meta['unit_details'] ?? ($addr->details ?? null),
+                ] + $drop,
+            ];
+        })->sortBy(fn ($row) => [$row['can_accept'] ? 0 : 1, $row['to_pickup_km'] ?? 9999])->values();
+
+        return response()->json(['data' => $data, 'meta' => ['active' => $active, 'max_active' => self::MAX_ACTIVE, 'online' => (bool) $p->is_online]]);
+    }
+
+    /** The driver takes an open order: it becomes theirs, exactly as if dispatch had assigned it. */
+    public function acceptOrder(Request $request, int $id)
+    {
+        $p = $this->profile($request);
+        abort_unless($p->is_online, 422, 'Go online to accept orders.');
+
+        $assignmentId = DB::transaction(function () use ($p, $id) {
+            // two drivers pressing Accept together: the row lock lets only the first one through
+            $order = DB::table('orders')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($order && $order->open_to_riders && in_array($order->status, ['accepted', 'preparing', 'ready'], true), 422, 'This order is no longer open to riders.');
+            abort_unless($order->status === 'ready', 422, 'The kitchen is still preparing this order. Accept it once it is ready.');
+            abort_if($order->payment_method === 'pickup', 422, 'This is a pickup order.');
+            abort_if(DB::table('delivery_assignments')->where('order_id', $order->id)->exists(), 422, 'Another driver already took this order.');
+
+            $active = DB::table('delivery_assignments')->where('rider_profile_id', $p->id)->whereIn('status', ['assigned', 'picked_up'])->count();
+            abort_if($active >= self::MAX_ACTIVE, 422, 'You already carry ' . self::MAX_ACTIVE . ' deliveries. Finish one first.');
+
+            $assignment = DB::table('delivery_assignments')->insertGetId([
+                'order_id' => $order->id,
+                'rider_profile_id' => $p->id,
+                'status' => 'assigned',
+                'assigned_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('orders')->where('id', $order->id)->update(['status' => 'dispatched', 'dispatched_at' => now(), 'open_to_riders' => false, 'updated_at' => now()]);
+
+            return $assignment;
+        });
+
+        return response()->json(['status' => 'accepted', 'delivery_id' => $assignmentId], 201);
+    }
+
     private function myAssignment(Request $request, int $id): object
     {
         $p = $this->profile($request);

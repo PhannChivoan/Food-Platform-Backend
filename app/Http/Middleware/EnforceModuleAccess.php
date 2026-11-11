@@ -22,7 +22,7 @@ class EnforceModuleAccess
 {
     private const ORDER_PAGES = ['orders', 'pending-orders', 'kitchen-workflow', 'completed-orders'];
     private const MENU_PAGES = ['menu', 'menu-categories', 'menu-modifiers'];
-    private const RIDER_PAGES = ['dispatch', 'delivery-tracking', 'rider-earnings', 'my-deliveries'];
+    private const RIDER_PAGES = ['dispatch', 'delivery-tracking', 'rider-earnings', 'my-deliveries', 'my-deliveries-available', 'my-deliveries-completed'];
 
     /** @return array<int, array{0:string,1:?array,2:?array}> */
     private static function rules(): array
@@ -37,6 +37,8 @@ class EnforceModuleAccess
             ['#^(promotions/(validate|redeem)|users/rider-candidates|delivery-fee/calculate|access-windows/status)$#', null, null],
 
             ['#^settings#', ['general-settings'], null],
+            // landing page: the texts & images page and one page per card group
+            ['#^landing-content#', ['landing-content', 'landing-home-perks', 'landing-home-stats', 'landing-home-categories', 'landing-home-services', 'landing-home-story', 'landing-home-help', 'landing-services-tools', 'landing-services-points', 'landing-services-features', 'landing-about-numbers', 'landing-about-pillars', 'landing-about-timeline', 'landing-about-impact'], null],
             ['#^users#', ['roles-permissions'], null],
             ['#^(access-windows|shift-schedules)#', ['access-windows'], null],
             ['#^activity-logs#', ['activity-log'], null],

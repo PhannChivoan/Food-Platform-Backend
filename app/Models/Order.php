@@ -12,7 +12,8 @@ class Order extends Model
         'surge_fee', 'discount', 'tax', 'total', 'payment_method',
         'is_paid', 'customer_notes', 'accepted_at', 'preparing_at',
         'ready_at', 'dispatched_at', 'delivered_at', 'cancelled_at', 'meta',
-        'refunded_at', 'refund_amount', 'refund_reason'
+        'refunded_at', 'refund_amount', 'refund_reason',
+        'open_to_riders', 'open_to_riders_at',
     ];
 
     protected $casts = [
@@ -23,6 +24,8 @@ class Order extends Model
         'tax' => 'decimal:2',
         'total' => 'decimal:2',
         'is_paid' => 'boolean',
+        'open_to_riders' => 'boolean',
+        'open_to_riders_at' => 'datetime',
         'meta' => 'array',
         'accepted_at' => 'datetime',
         'preparing_at' => 'datetime',

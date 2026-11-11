@@ -45,10 +45,9 @@ class DeliveryService
                 'delivered_at' => now(),
                 // cash orders are settled by the rider at the door; online payments are
                 // settled by the platform when payments.auto_settlement is on
-                'is_paid' => DB::raw(
-                    "CASE WHEN payment_method = 'cash' THEN 1"
-                    . (PlatformSettings::bool('auto_settlement', true) ? ' ELSE 1' : ' ELSE is_paid END')
-                ),
+                'is_paid' => PlatformSettings::bool('auto_settlement', true)
+                    ? 1 // every order is settled on delivery
+                    : DB::raw("CASE WHEN payment_method = 'cash' THEN 1 ELSE is_paid END"),
                 'updated_at' => now(),
             ]);
 

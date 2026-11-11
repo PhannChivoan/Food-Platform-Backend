@@ -31,15 +31,19 @@ class NavigationItemsController extends Controller
         $can = fn ($item) => $item->is_active
             && ($allowedIds === null || in_array($item->id, $allowedIds));
 
-        $items = NavigationItems::with('children')
+        // the menu can nest (Landing Page > Home > card groups): keep what the role may open, drop empty groups
+        $prune = function ($item) use (&$prune, $can) {
+            $item->setRelation('children', $item->children->filter($can)->map($prune)
+                ->filter(fn ($child) => $child->is_dropdown ? $child->children->isNotEmpty() : true)->values());
+            return $item;
+        };
+
+        $items = NavigationItems::with('children.children.children')
             ->root()
             ->active()
             ->orderBy('sort_order')
             ->get()
-            ->map(function ($item) use ($can) {
-                $item->setRelation('children', $item->children->filter($can)->values());
-                return $item;
-            })
+            ->map($prune)
             ->filter(fn ($item) => $item->is_dropdown ? $item->children->isNotEmpty() : $can($item))
             ->values();
 

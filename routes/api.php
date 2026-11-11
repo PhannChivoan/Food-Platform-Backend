@@ -29,6 +29,8 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
     Route::get('/public/platform', [\App\Http\Controllers\Api\V1\PartnerController::class, 'platform']);
     // live platform settings (name, branding, currency, maintenance flag, payment methods)
     Route::get('/public/config', [\App\Http\Controllers\Api\V1\SettingsController::class, 'publicConfig']);
+    // landing page texts / images replaced from the admin (Administration -> Landing Page)
+    Route::get('/public/landing-content', [\App\Http\Controllers\Api\V1\LandingContentController::class, 'publicShow']);
     Route::get('/partner/email-available', [\App\Http\Controllers\Api\V1\PartnerController::class, 'emailAvailable'])->middleware('throttle:30,1');
     Route::post('/partner/register', [\App\Http\Controllers\Api\V1\PartnerController::class, 'register']);
 
@@ -42,6 +44,8 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::patch('/online', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'toggleOnline']);
         Route::post('/location', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'location']);
         Route::get('/deliveries', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'deliveries']);
+        Route::get('/available-orders', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'availableOrders']);
+        Route::post('/available-orders/{id}/accept', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'acceptOrder'])->whereNumber('id');
         Route::post('/deliveries/{id}/pickup', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'pickup'])->whereNumber('id');
         Route::post('/deliveries/{id}/complete', [\App\Http\Controllers\Api\V1\RiderPortalController::class, 'complete'])->whereNumber('id');
     });
@@ -145,6 +149,13 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);
 
+        // LANDING PAGE CONTENT (texts and images of the storefront)
+        Route::get('/landing-content', [\App\Http\Controllers\Api\V1\LandingContentController::class, 'show']);
+        Route::put('/landing-content', [\App\Http\Controllers\Api\V1\LandingContentController::class, 'update']);
+        Route::post('/landing-content/image', [\App\Http\Controllers\Api\V1\LandingContentController::class, 'uploadImage']);
+        Route::put('/landing-content/lists/{id}', [\App\Http\Controllers\Api\V1\LandingContentController::class, 'updateList']);
+        Route::delete('/landing-content/lists/{id}', [\App\Http\Controllers\Api\V1\LandingContentController::class, 'resetList']);
+
         // â”€â”€â”€ MODULE 3: RESTAURANT & BRANCH â”€â”€â”€
         Route::get('/branches', [RestaurantController::class, 'branches']);
         Route::apiResource('/restaurants', RestaurantController::class);
@@ -195,6 +206,7 @@ Route::prefix('v1')->middleware('conditional.get')->group(function () {
         Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus']);
         Route::patch('/orders/{order}/prepare', [OrderController::class, 'startPreparing']);
         Route::patch('/orders/{order}/ready', [OrderController::class, 'markReady']);
+        Route::patch('/orders/{order}/rider-visibility', [OrderController::class, 'riderVisibility']);
         Route::patch('/orders/{order}/cancel', [OrderController::class, 'cancel']);
         Route::patch('/orders/{order}/picked-up', [OrderController::class, 'markPickedUp']);
         Route::post('/orders/{order}/refund', [OrderController::class, 'refund']);

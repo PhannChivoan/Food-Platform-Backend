@@ -475,6 +475,23 @@ class OrderController extends Controller
         return response()->json($order);
     }
 
+    /**
+     * The kitchen opens an order to riders (or takes it back). An open order shows in the drivers' "Available orders"
+     * and any online driver can accept it, instead of the order waiting for dispatch to assign someone.
+     */
+    public function riderVisibility(Request $request, Order $order)
+    {
+        $open = $request->validate(['open' => 'required|boolean'])['open'];
+
+        abort_if($order->payment_method === 'pickup', 422, 'A pickup order is collected by the customer: it has no delivery.');
+        abort_unless(in_array($order->status, ['accepted', 'preparing', 'ready'], true), 422, 'Only orders that are accepted, being prepared or ready can be opened to riders.');
+        abort_if($open && DB::table('delivery_assignments')->where('order_id', $order->id)->exists(), 422, 'This order already has a rider.');
+
+        $order->update(['open_to_riders' => $open, 'open_to_riders_at' => $open ? now() : null]);
+
+        return response()->json($order);
+    }
+
     /** A pickup order was collected by the customer, who paid at the counter. */
     public function markPickedUp(Order $order)
     {

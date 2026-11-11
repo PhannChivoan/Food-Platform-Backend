@@ -20,7 +20,21 @@ class RoleNavigationController extends Controller
             ->pluck('navigation_item_id')
             ->all();
 
-        $tree = NavigationItems::with('children')
+        // The access screen has two levels. A group inside a group (Landing Page > Home > ...) is not a row of its
+        // own: its pages are listed under the top group, named "Home · Hero highlights".
+        $leaves = function ($item, $prefix = '') use (&$leaves) {
+            $out = [];
+            foreach ($item->children as $child) {
+                if ($child->is_dropdown && $child->children->isNotEmpty()) {
+                    $out = array_merge($out, $leaves($child, $child->label . ' · '));
+                } else {
+                    $out[] = $child->setAttribute('shown_label', $prefix . $child->label);
+                }
+            }
+            return $out;
+        };
+
+        $tree = NavigationItems::with('children.children.children')
             ->root()
             ->orderBy('sort_order')
             ->get()
@@ -30,10 +44,10 @@ class RoleNavigationController extends Controller
                 'label' => $parent->label,
                 'is_dropdown' => $parent->is_dropdown,
                 'visible' => in_array($parent->id, $assigned),
-                'children' => $parent->children->map(fn ($child) => [
+                'children' => collect($leaves($parent))->map(fn ($child) => [
                     'id' => $child->id,
                     'key' => $child->key,
-                    'label' => $child->label,
+                    'label' => $child->shown_label,
                     'visible' => in_array($child->id, $assigned),
                 ])->values(),
             ])
@@ -50,6 +64,15 @@ class RoleNavigationController extends Controller
         ]);
 
         $ids = collect($data['navigation_item_ids'])->unique()->values();
+
+        // the screen only knows pages and top groups: a page that is on also switches on the groups it sits in
+        $parents = DB::table('navigation_items')->pluck('parent_id', 'id');
+        foreach ($ids->all() as $id) {
+            for ($up = $parents[$id] ?? null; $up; $up = $parents[$up] ?? null) {
+                $ids->push($up);
+            }
+        }
+        $ids = $ids->unique()->values();
 
         $before = DB::table('role_navigations')->where('role_id', $role->id)->pluck('navigation_item_id')->all();
 
