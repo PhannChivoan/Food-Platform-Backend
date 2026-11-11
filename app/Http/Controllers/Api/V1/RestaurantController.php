@@ -477,7 +477,7 @@ class RestaurantController extends Controller
     {
         $this->deleteLogo($previous);
 
-        return \App\Services\CloudinaryService::upload($file, self::LOGO_DIR);
+        return \App\Services\CloudinaryService::upload($file, self::LOGO_DIR, true);
     }
 
     private function deleteLogo($path): void

@@ -22,7 +22,7 @@ class MenuController extends Controller
 
     protected function handleItemImage($file): string
     {
-        return CloudinaryService::upload($file, self::IMAGE_DIR);
+        return CloudinaryService::upload($file, self::IMAGE_DIR, true);
     }
 
     protected function deleteItemImage($path): void

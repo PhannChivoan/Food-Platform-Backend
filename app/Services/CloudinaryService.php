@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -12,10 +13,27 @@ use RuntimeException;
  */
 class CloudinaryService
 {
-    public static function upload(UploadedFile $file, string $folder): string
+    /**
+     * Upload, or reuse: with $reuse the image is stored under "<folder>/<file name>", and when Cloudinary already
+     * holds that name nothing is uploaded, the existing image's URL is returned instead.
+     */
+    public static function upload(UploadedFile $file, string $folder, bool $reuse = false): string
     {
         $cfg = self::config();
         $params = ['folder' => $folder, 'timestamp' => time()];
+
+        if ($reuse) {
+            $name = self::slugName($file->getClientOriginalName());
+            $publicId = "$folder/$name";
+
+            $existing = self::existingUrl($publicId, $cfg);
+            if ($existing) {
+                return $existing;
+            }
+
+            // fixed public id, never overwritten
+            $params = ['overwrite' => 'false', 'public_id' => $publicId, 'timestamp' => time(), 'unique_filename' => 'false'];
+        }
 
         $response = Http::asMultipart()
             ->attach('file', fopen($file->getRealPath(), 'r'), $file->getClientOriginalName())
@@ -31,6 +49,23 @@ class CloudinaryService
         }
 
         return $response->json('secure_url');
+    }
+
+    private static function slugName(string $original): string
+    {
+        $base = pathinfo($original, PATHINFO_FILENAME);
+        $slug = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($base)), '-');
+
+        return substr($slug !== '' ? $slug : 'image', 0, 80);
+    }
+
+    /** The secure URL of an image already in Cloudinary under this public id, or null. */
+    private static function existingUrl(string $publicId, array $cfg): ?string
+    {
+        $response = Http::withBasicAuth($cfg['api_key'], $cfg['api_secret'])
+            ->get("https://api.cloudinary.com/v1_1/{$cfg['cloud_name']}/resources/image/upload/".str_replace('%2F', '/', rawurlencode($publicId)));
+
+        return $response->successful() ? ($response->json('secure_url') ?: null) : null;
     }
 
     /** Public URL for a stored value: Cloudinary URLs pass through, legacy local paths map to /storage. */
@@ -68,6 +103,11 @@ class CloudinaryService
             return;
         }
 
+        // the same image can serve several records: keep it while another one still uses it
+        if (self::usageCount($url) >= 2) {
+            return;
+        }
+
         // .../upload/[transformations/][v123/]folder/name.ext -> folder/name
         $path = explode('/upload/', $url, 2)[1];
         $path = preg_replace('#^(?:[^/]+/)*?v\d+/#', '', $path);
@@ -85,6 +125,20 @@ class CloudinaryService
         if (! $response->successful()) {
             Log::warning('Cloudinary delete failed', ['public_id' => $publicId, 'body' => $response->body()]);
         }
+    }
+
+    private static function usageCount(string $url): int
+    {
+        $count = 0;
+        foreach ([['menu_items', 'image'], ['restaurants', 'logo'], ['restaurants', 'cover_image'], ['users', 'avatar'], ['settings', 'value']] as [$table, $column]) {
+            try {
+                $count += DB::table($table)->where($column, $url)->count();
+            } catch (\Throwable) {
+                // unknown table or column on this install: ignore
+            }
+        }
+
+        return $count;
     }
 
     private static function sign(array $params, string $secret): string
